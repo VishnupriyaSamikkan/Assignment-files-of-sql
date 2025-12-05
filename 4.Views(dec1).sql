@@ -1,0 +1,243 @@
+﻿/*Assignment – SQL Server 
+ 
+• Views 
+• CTE 
+• Programming 
+• Ranking */
+ 
+--1. Employees 
+CREATE TABLE Employees 
+( 
+    EmpId INT PRIMARY KEY, 
+    EmpName VARCHAR(100), 
+    DeptId INT, 
+    ManagerId INT NULL, 
+    JoinDate DATE, 
+    Salary DECIMAL(10,2) 
+); 
+ 
+INSERT INTO Employees VALUES 
+(1, 'Amit', 10, NULL, '2020-01-10', 65000), 
+(2, 'Neha', 10, 1,    '2022-02-15', 50000), 
+(3, 'Ravi', 20, 1,    '2023-03-12', 45000), 
+(4, 'Sana', 20, 3,    '2024-01-20', 42000), 
+(5, 'Karan', 30, 1,   '2021-07-18', 55000); 
+ 
+--2. Departments 
+CREATE TABLE Departments 
+( 
+    DeptId INT PRIMARY KEY, 
+    DeptName VARCHAR(100) 
+); 
+ 
+INSERT INTO Departments VALUES 
+(10, 'IT'), 
+(20, 'HR'), 
+(30, 'Finance'); 
+ 
+ 
+ 
+--3. Sales 
+CREATE TABLE Sales 
+( 
+    SaleId INT PRIMARY KEY, 
+    EmpId INT, 
+    Region VARCHAR(50), 
+    SaleAmount DECIMAL(10,2), 
+    SaleDate DATE 
+); 
+ 
+INSERT INTO Sales VALUES 
+(1, 1, 'North', 100000, '2024-01-01'), 
+(2, 2, 'North',  90000, '2024-01-10'), 
+(3, 3, 'South', 120000, '2024-02-05'), 
+(4, 4, 'South', 120000, '2024-02-20'), 
+(5, 5, 'North', 110000, '2024-03-15'); 
+ 
+--4. Transactions 
+CREATE TABLE Transactions 
+( 
+    TransId INT PRIMARY KEY, 
+    AccountId INT, 
+    Amount DECIMAL(10,2), 
+    TransDate DATE 
+); 
+ 
+INSERT INTO Transactions VALUES 
+(1, 101, 1000, '2024-01-01'), 
+(2, 101, 2000, '2024-02-01'), 
+(3, 101, -500, '2024-03-01'), 
+(4, 102, 1500, '2024-01-15'), 
+(5, 102, -200, '2024-03-10'); 
+ 
+--Task-1 
+/**Write a query using CASE to categorize salary levels on Employees table: 
+• <20000 → Low 
+• 20000–50000 → Medium 
+• 50000 → High */
+select empid, empname, salary,
+case
+    when salary < 20000 then 'low'
+    when salary between 20000 and 50000 then 'medium'
+    when salary >= 50000 then 'high'
+end as salary_level
+from employees;
+
+
+--Task -2 
+/*Declare a variable @Age. 
+Write logic using IF / ELSE: 
+• If Age < 18 → print “Minor” 
+• Else If Age between 18–60 → “Adult” 
+• Else → “Senior” */
+declare @age int = 45;
+
+if @age < 18
+    print 'minor';
+else if @age between 18 and 60
+    print 'adult';
+else
+    print 'senior';
+
+ 
+ 
+--Task-3 Encrypted & Schema-Bound View 
+/*Create an encrypted and schemabound view that: 
+• Joins Employees, Departments, and Salaries tables 
+• Returns only employees who joined in the last 3 years 
+• Includes computed column: AnnualSalary = Salary * 12 
+• Prevents updates to base tables that break schema binding 
+Tasks 
+1. Create the view with WITH SCHEMABINDING, ENCRYPTION. 
+2. Try altering an underlying table column → observe the error.*/ 
+--1
+create view dbo.vw_emp_recent
+with schemabinding, encryption
+as
+select 
+    e.empid,
+    e.empname,
+    e.deptid,
+    d.deptname,
+    e.joindate,
+    e.salary,
+    e.salary * 12 as annualsalary
+from dbo.employees e
+join dbo.departments d on e.deptid = d.deptid
+where e.joindate >= dateadd(year, -3, getdate());
+ --2
+ drop view dbo.vw_emp_recent;
+
+alter table employees alter column empname varchar(200);
+
+ 
+--Task-4— Complex Multi-Table View 
+/*Create a view that: 
+• Joins Employees + Sales 
+• Shows total sales per employee 
+• Shows rank based on total sales across company */
+create view vw_emp_sales
+as
+select 
+    e.empid,
+    e.empname,
+    isnull(sum(s.saleamount),0) as totalsales,
+    rank() over(order by sum(s.saleamount) desc) as sales_rank
+from employees e
+left join sales s on e.empid = s.empid
+group by e.empid, e.empname;
+
+ 
+--Task-5— Simulate Error Capture 
+/*Write a block that: 
+• Attempts dividing by zero 
+• Catches the error 
+• Prints error details */
+begin try
+    declare @x int = 10, @y int = 0, @z int;
+    set @z = @x / @y;
+end try
+begin catch
+    print 'error number: ' + cast(error_number() as varchar);
+    print 'error message: ' + error_message();
+end catch;
+
+ 
+--Task-6— Nested TRY…CATCH With Custom Error 
+/*Validate salary: 
+• If salary < 1000, throw custom error using THROW. 
+• Declare variable  to simulate salary */
+ declare @salary int = 800;
+
+begin try
+    if @salary < 1000
+        throw 50001, 'salary too low', 1;
+
+    print 'salary valid';
+end try
+begin catch
+    print 'caught error: ' + error_message();
+end catch;
+
+--Task-7— Rank Employees by Region Sales 
+/*Task 
+• Compare Rank / Dense_Rank / Row_Number 
+• Identify top 2 per region */
+ select 
+    empid,
+    region,
+    saleamount,
+    rank() over(partition by region order by saleamount desc) as rnk,
+    dense_rank() over(partition by region order by saleamount desc) as dense_rnk,
+    row_number() over(partition by region order by saleamount desc) as rownum
+from sales;
+--top 2 per region
+with r as (
+    select *,
+           row_number() over(partition by region order by saleamount desc) as rn
+    from sales
+)
+select * from r where rn <= 2;
+
+--Task-8 -Using Sales table: 
+/*• First CTE: Filter only last 1 year sales 
+• Second CTE: Compute total sales per region 
+• Third CTE: Rank regions based on total sales 
+• Output top 3 regions */
+ select e.empid, e.empname, e.deptid, s.saleamount
+from employees e
+join sales s on e.empid = s.empid
+where s.saleamount in (
+    select saleamount
+    from sales
+    group by saleamount
+    having count(*) > 1
+)
+order by s.saleamount;
+
+
+--Task-8 Find Employees With Duplicate SalesAmount in Any Department 
+ 
+ select e.empid, e.empname, e.deptid, s.saleamount
+from employees e
+join sales s on e.empid = s.empid
+where s.saleamount in (
+    select saleamount
+    from sales
+    group by saleamount
+    having count(*) > 1
+)
+order by s.saleamount;
+
+ 
+ 
+ 
+/*Task – 9 
+Perform Pagination and list all details from employees who’s page between 6 and 10 
+ **/
+ select *
+from employees
+order by empid
+offset 5 rows fetch next 5 rows only;
+
+ 

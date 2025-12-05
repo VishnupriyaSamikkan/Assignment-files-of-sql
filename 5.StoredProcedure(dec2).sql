@@ -1,0 +1,204 @@
+--Procedure--
+--1. Create a procedure which accepts input parameter and inserts the data in the customer table. 
+CREATE PROCEDURE insertCustomer (@name varchar(20),@age int,@address varchar(100))
+as
+begin
+insert into customer values(@name,@age,@address);
+end
+
+exec insertCustomer 'Vishnu',20,'chennai';
+select * from customer;
+
+--2.  Create a procedure for orders table , which displays all the purchase made between  1-12-2005  and 2-12-2007
+
+
+select * from Orders;
+CREATE PROCEDURE getbydate (@start date,@end date)
+as
+select * from Orders where orderdate between @start and @end;
+
+exec getbydate '1-12-2005','2-12-2007';
+
+--3. create a procedure which reads custid as parameter and return qty and produtid as output parameter
+create procedure getbyid
+	@custid int,
+	@pid int output,
+	@qty int output
+as
+begin
+	select top 1
+		@pid=productid,
+		@qty = qty
+	from sales
+	where custid =@custid;
+end;
+select * from sales;
+declare @p int,@q int;
+exec getbyid 1,@pid=@p output,@qty=@q output;
+select @p as pid,@q as qty
+
+--4. Write a batch that will check for the existence of the productname 
+--“books” if it exists, display the total stock of the book else print  
+--“productname books not found”.
+select * from products;
+select * from sales;
+alter procedure getbyproductname
+as
+if exists (Select * from products where productname ='books')
+begin
+	select sum(s.qty) as totalStock
+	from sales s
+	join products p ON s.productid=p.productid
+	where p.Productname = 'books'
+end
+else
+begin
+  print 'Productname books not found'
+end
+ 
+exec getbyproductname
+--5.insert data to customer table via return value of sp_getdata() procedure
+
+alter procedure getdata
+as
+select * from customer;
+drop table customers
+create table customers (cust_id int,cust_name varchar(100),age int,address varchar(100));
+ insert into customers  exec getdata;
+ select * from customers;
+
+ /**6. Create a procedure to display all customer details where rownumber 
+between 2 to 5 (accept row number as a parameter)**/
+
+create procedure spgetcustomersbyRowNo(@FromRow int, @ToRow int)
+as
+begin;
+with CTE as( select cust_id,cust_name,age,address,Row_Number() OVER(ORDER BY cust_id)as rn from customers)
+select cust_id,cust_name,age,address
+From CTE
+where rn between @FromRow And @ToRow;
+end
+exec spgetcustomersbyRowNo 2,5;
+ 
+ /**7.Create a stored procedure to insert a new employee 
+Create a table Employees and write a stored procedure: 
+• Procedure name: spAddEmployee 
+• Inputs: Name, Department, Salary 
+• Insert the record into Employees table. 
+• Return newly generated CustomerID using SCOPE_IDENTITY(). **/
+create procedure spaddemployee
+    @name varchar(100),
+    @deptid int,
+    @salary decimal(10,2),
+    @newemployeeid int output
+as
+begin
+    insert into employees (empname, deptid, salary, joindate)
+    values (@name, @deptid, @salary, getdate());
+
+    set @newemployeeid = scope_identity();
+end;
+go
+
+--exec
+declare @id int;
+
+exec spaddemployee
+    @name = 'ravi',
+    @deptid = 10,
+    @salary = 56000,
+    @newemployeeid = @id output;
+
+select @id as newemployeeid;
+
+/**8.Create a stored procedure with default parameter 
+Create spGetProductsByCategory 
+• Parameter: CategoryName (default should be ‘Electronics’) 
+• Return all products of that category. 
+• Create Procedure WITH ENCRYPTION**/
+
+create procedure spgetproductsbycategory
+    @categoryname varchar(100) = 'electronics'
+with encryption
+as
+begin
+    select productid, productname, categoryname, price
+    from products
+    where categoryname = @categoryname;
+end;
+go
+
+exec spgetproductsbycategory;       -- uses default electronics
+exec spgetproductsbycategory 'toys';
+
+/**9. Stored procedure using TRY…CATCH 
+Create spSafeOrderInsert 
+• Insert a new order 
+• If any error occurs, insert error details into an ErrorLog table **/
+create table errorlog(
+    logid int identity(1,1) primary key,
+    errormessage varchar(4000),
+    errornumber int,
+    errorline int,
+    errorprocedure varchar(200),
+    errordate datetime default getdate()
+);
+create procedure spsafeorderinsert
+    @cust_id int,
+    @productname varchar(100),
+    @quantity int
+as
+begin
+    begin try
+        insert into orders (cust_id, product, qty)
+        values (@cust_id, @productname, @quantity);
+    end try
+    begin catch
+        insert into errorlog (errormessage, errornumber, errorline, errorprocedure)
+        values (
+            error_message(),
+            error_number(),
+            error_line(),
+            error_procedure()
+        );
+    end catch
+end;
+
+--execute
+exec spsafeorderinsert 1, 'laptop', 2;
+select * from errorlog;
+
+
+/**10.Stored procedure with multiple operations 
+Create spUpdateSalary 
+• Inputs: EmpID, Percentage 
+• Increase employee salary by given percentage 
+• Return updated salary **/
+select * from Employees;
+ 
+CREATE PROCEDURE spUpdateSalary
+    @empid int,
+    @percentage decimal(5,2),
+    @updatedsalary decimal(10,2) output
+as
+begin
+    update employees
+    set salary = salary + (salary * @percentage / 100)
+    where empid = @empid;
+
+    select @updatedsalary = salary 
+    from employees 
+    where empid = @empid;
+end;
+
+
+--excute
+ declare @newsalary decimal(10,2);
+
+exec spupdatesalary
+    @empid = 4,
+    @percentage = 10,
+    @updatedsalary = @newsalary output;
+
+select @newsalary as updated_salary;
+select * from employees;
